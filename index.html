@@ -1,1 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Track your shipment</title>
+<style>
+:root{
+  --bg:#EDF1F3; --surface:#FFFFFF; --ink:#13242C; --muted:#5B6E77; --line:#D3DCE0;
+  --route:#0E7C86; --route-soft:#CFE7E9; --signal:#E8590C; --ok:#2B8A3E; --danger:#C92A2A;
+  --on-route:#FFFFFF;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0E1A20; --surface:#16262E; --ink:#E8F0F3; --muted:#93A8B1; --line:#2A3F49;
+    --route:#3CC1CC; --route-soft:#1B3B42; --signal:#FF8A4C; --ok:#69DB7C; --danger:#FF8787;
+    --on-route:#0E1A20;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Avenir Next","Segoe UI",system-ui,"Noto Sans",sans-serif;line-height:1.5}
+.wrap{max-width:720px;margin:0 auto;padding:20px 16px 64px}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px;gap:12px}
+.brand{font-weight:700;font-size:18px;letter-spacing:.01em}
+.link{background:none;border:0;color:var(--muted);font:inherit;font-size:14px;cursor:pointer;text-decoration:underline;padding:4px}
+h1{font-size:clamp(28px,7vw,40px);line-height:1.15;margin:0 0 8px;font-weight:700}
+h2{font-size:18px;margin:0 0 12px}
+p.sub{color:var(--muted);margin:0 0 20px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:16px}
+label{display:block;font-size:13px;color:var(--muted);margin:12px 0 4px}
+input,select,textarea{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:11px 12px}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--route);outline-offset:1px}
+textarea{resize:vertical;min-height:64px}
+.row{display:flex;gap:10px}
+.row>*{flex:1}
+.btn{font:inherit;font-weight:600;border:0;border-radius:6px;padding:11px 18px;cursor:pointer;background:var(--route);color:var(--on-route)}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.danger{background:transparent;color:var(--danger);border:1px solid var(--danger)}
+.track-form{display:flex;gap:10px}
+.track-form input{flex:1}
+.msg{margin:12px 0 0;font-size:14px}
+.msg.err{color:var(--danger)}
+.msg.ok{color:var(--ok)}
 
+/* Route (kept left-to-right in every language so the truck moves origin to destination) */
+.status-line{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.status-big{font-size:26px;font-weight:700}
+.badge{font-size:13px;color:var(--muted)}
+.route{position:relative;margin:34px 6px 8px;height:44px;direction:ltr}
+.route .track{position:absolute;left:0;right:0;top:20px;height:4px;background:var(--route-soft);border-radius:2px}
+.route .done{position:absolute;left:0;top:20px;height:4px;background:var(--route);border-radius:2px;transition:width .8s ease}
+.route .stop{position:absolute;top:14px;width:16px;height:16px;border-radius:50%;background:var(--surface);border:3px solid var(--route)}
+.route .stop.a{left:-6px}.route .stop.b{right:-6px}
+.route .stop.b.reached{background:var(--route)}
+.route .truck{position:absolute;top:0;transform:translateX(-50%);width:44px;height:44px;border-radius:50%;background:var(--signal);display:grid;place-items:center;transition:left .8s ease;box-shadow:0 0 0 4px var(--surface)}
+.route .truck svg{width:24px;height:24px;fill:#fff}
+.ends{display:flex;justify-content:space-between;font-size:14px;gap:12px;direction:ltr}
+.ends div:first-child{text-align:left}
+.ends div:last-child{text-align:right}
+.ends small{display:block;color:var(--muted);font-size:12px}
+.meta{display:flex;gap:24px;flex-wrap:wrap;margin-top:18px;padding-top:14px;border-top:1px solid var(--line);font-size:14px}
+.meta small{display:block;color:var(--muted);font-size:12px}
+
+/* Timeline */
+.tl{list-style:none;margin:0;padding:0}
+.tl li{position:relative;padding:0 0 20px 0;padding-inline-start:26px;border-inline-start:2px solid var(--line);margin-inline-start:6px}
+.tl li:last-child{border-inline-start-color:transparent;padding-bottom:0}
+.tl li::before{content:"";position:absolute;inset-inline-start:-7px;top:4px;width:12px;height:12px;border-radius:50%;background:var(--line)}
+.tl li:first-child::before{background:var(--route);box-shadow:0 0 0 4px var(--route-soft)}
+.tl .t-status{font-weight:600}
+.tl .t-meta{font-size:13px;color:var(--muted)}
+.tl .t-note{font-size:14px;margin-top:2px}
+.tl .x{float:inline-end}
+
+/* Admin list */
+.ship-item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.ship-item:last-child{border-bottom:0}
+.ship-item strong{display:block}
+.ship-item span{font-size:13px;color:var(--muted)}
+input[type=range]{padding:0;accent-color:var(--route)}
+@media (prefers-reduced-motion: reduce){.route .done,.route .truck{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand" id="brand"></div>
+    <button class="link" id="modeBtn"></button>
+  </header>
+  <main id="app"></main>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, doc, getDoc, getDocs, setDoc, deleteDoc, collection } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+/* ====== SETTINGS: edit these ====== */
+const BUSINESS_NAME = "Your Business Name";
+
+// 1) Paste your Firebase web app config here (Firebase console > Project settings > Your apps)
+const firebaseConfig = {
+  apiKey: "AIzaSyChOkaU3YCnG3q4UQgs54dorh5y51PdJ5I",
+  authDomain: "my-tracker-5b091.firebaseapp.com",
+  projectId: "my-tracker-5b091",
+  storageBucket: "my-tracker-5b091.firebasestorage.app",
+  messagingSenderId: "787078083527",
+  appId: "1:787078083527:web:9b13edf55c63f9a8f05fe2"
+};
+
+// 2) The email you create as the admin user in Firebase Authentication.
+//    Its password is your admin passcode (chibundu2).
+const ADMIN_EMAIL = "nelsongee268@gmail.com";
+/* ================================== */
+
+/* ====== TRANSLATIONS ====== */
+/* The site picks the visitor's browser language automatically. Falls back to English. */
+const EN_STATUSES = ["Order received","Picked up","In transit","Out for delivery","Delivered"];
+const L = {
+en:{admin:"Admin",viewClient:"View as client",h_client:"Where is my shipment?",sub_client:"Enter the tracking number you were given.",tn_ph:"e.g. TRK-1001",track:"Track",checking:"Checking…",notFound:"No shipment found for that number. Check it and try again.",trackNo:"Tracking no.",preparedFor:"Prepared for",expected:"Expected delivery",lastUpdated:"Last updated",updates:"Updates",noUpdates:"No updates yet.",from:"From",to:"To",remove:"Remove",routeAria:"Shipment is {p}% of the way to its destination",h_login:"Admin sign in",sub_login:"Enter your passcode to manage shipments.",passcode:"Passcode",signin:"Sign in",wrong:"Wrong passcode. Try again.",h_manage:"Manage shipments",sub_manage:"Create a shipment, give your client the tracking number, then post updates as it moves.",yourShips:"Your shipments",noShips:"No shipments yet. Add your first one below.",noClient:"No client name",newShip:"New shipment",trackNum:"Tracking number",clientName:"Client name",cityPh:"City / country",etaPh:"e.g. Dec 5, 2026",create:"Create shipment",errFields:"Add a tracking number, a starting point, and a destination.",errExists:"That tracking number already exists. Use a different one.",errSave:"Could not save. Try again.",statusLbl:"Status",progress:"Progress",curLoc:"Current location",locPh:"e.g. Dubai hub",note:"Note for client (optional)",post:"Post update",close:"Close",del:"Delete shipment",delConfirm:"Tap again to delete",history:"Update history",posted:"Update posted. Your client can see it now.",sts:["Order received","Picked up","In transit","Out for delivery","Delivered"]},
+es:{admin:"Administrador",viewClient:"Ver como cliente",h_client:"¿Dónde está mi envío?",sub_client:"Introduce el número de seguimiento que te dieron.",tn_ph:"p. ej. TRK-1001",track:"Rastrear",checking:"Comprobando…",notFound:"No se encontró ningún envío con ese número. Revísalo e inténtalo de nuevo.",trackNo:"N.º de seguimiento",preparedFor:"Preparado para",expected:"Entrega estimada",lastUpdated:"Última actualización",updates:"Actualizaciones",noUpdates:"Aún no hay actualizaciones.",from:"Origen",to:"Destino",remove:"Quitar",routeAria:"El envío está al {p}% del camino a su destino",h_login:"Acceso de administrador",sub_login:"Introduce tu código para gestionar los envíos.",passcode:"Código",signin:"Entrar",wrong:"Código incorrecto. Inténtalo de nuevo.",h_manage:"Gestionar envíos",sub_manage:"Crea un envío, dale el número de seguimiento a tu cliente y publica actualizaciones a medida que avanza.",yourShips:"Tus envíos",noShips:"Aún no hay envíos. Añade el primero abajo.",noClient:"Sin nombre de cliente",newShip:"Nuevo envío",trackNum:"Número de seguimiento",clientName:"Nombre del cliente",cityPh:"Ciudad / país",etaPh:"p. ej. 5 dic 2026",create:"Crear envío",errFields:"Añade un número de seguimiento, un origen y un destino.",errExists:"Ese número de seguimiento ya existe. Usa otro.",errSave:"No se pudo guardar. Inténtalo de nuevo.",statusLbl:"Estado",progress:"Progreso",curLoc:"Ubicación actual",locPh:"p. ej. centro de Dubái",note:"Nota para el cliente (opcional)",post:"Publicar actualización",close:"Cerrar",del:"Eliminar envío",delConfirm:"Toca de nuevo para eliminar",history:"Historial de actualizaciones",posted:"Actualización publicada. Tu cliente ya puede verla.",sts:["Pedido recibido","Recogido","En tránsito","En reparto","Entregado"]},
+fr:{admin:"Admin",viewClient:"Vue client",h_client:"Où est mon colis ?",sub_client:"Saisissez le numéro de suivi qui vous a été communiqué.",tn_ph:"ex. TRK-1001",track:"Suivre",checking:"Vérification…",notFound:"Aucun colis trouvé pour ce numéro. Vérifiez-le et réessayez.",trackNo:"N° de suivi",preparedFor:"Préparé pour",expected:"Livraison prévue",lastUpdated:"Dernière mise à jour",updates:"Mises à jour",noUpdates:"Aucune mise à jour pour l'instant.",from:"De",to:"Vers",remove:"Supprimer",routeAria:"Le colis a parcouru {p} % du trajet",h_login:"Connexion admin",sub_login:"Saisissez votre code pour gérer les envois.",passcode:"Code d'accès",signin:"Se connecter",wrong:"Code incorrect. Réessayez.",h_manage:"Gérer les envois",sub_manage:"Créez un envoi, donnez le numéro de suivi à votre client, puis publiez les mises à jour au fil du trajet.",yourShips:"Vos envois",noShips:"Aucun envoi. Ajoutez le premier ci-dessous.",noClient:"Sans nom de client",newShip:"Nouvel envoi",trackNum:"Numéro de suivi",clientName:"Nom du client",cityPh:"Ville / pays",etaPh:"ex. 5 déc. 2026",create:"Créer l'envoi",errFields:"Ajoutez un numéro de suivi, un départ et une destination.",errExists:"Ce numéro de suivi existe déjà. Utilisez-en un autre.",errSave:"Échec de l'enregistrement. Réessayez.",statusLbl:"Statut",progress:"Progression",curLoc:"Position actuelle",locPh:"ex. hub de Dubaï",note:"Note pour le client (facultatif)",post:"Publier la mise à jour",close:"Fermer",del:"Supprimer l'envoi",delConfirm:"Appuyez encore pour supprimer",history:"Historique des mises à jour",posted:"Mise à jour publiée. Votre client peut la voir.",sts:["Commande reçue","Colis pris en charge","En transit","En cours de livraison","Livré"]},
+de:{admin:"Admin",viewClient:"Kundenansicht",h_client:"Wo ist meine Sendung?",sub_client:"Geben Sie die Sendungsnummer ein, die Sie erhalten haben.",tn_ph:"z. B. TRK-1001",track:"Verfolgen",checking:"Wird geprüft…",notFound:"Keine Sendung zu dieser Nummer gefunden. Bitte prüfen und erneut versuchen.",trackNo:"Sendungsnr.",preparedFor:"Erstellt für",expected:"Voraussichtliche Lieferung",lastUpdated:"Zuletzt aktualisiert",updates:"Updates",noUpdates:"Noch keine Updates.",from:"Von",to:"Nach",remove:"Entfernen",routeAria:"Die Sendung hat {p} % des Weges zurückgelegt",h_login:"Admin-Anmeldung",sub_login:"Geben Sie Ihr Passwort ein, um Sendungen zu verwalten.",passcode:"Passwort",signin:"Anmelden",wrong:"Falsches Passwort. Bitte erneut versuchen.",h_manage:"Sendungen verwalten",sub_manage:"Legen Sie eine Sendung an, geben Sie Ihrem Kunden die Sendungsnummer und posten Sie Updates während des Transports.",yourShips:"Ihre Sendungen",noShips:"Noch keine Sendungen. Fügen Sie unten die erste hinzu.",noClient:"Kein Kundenname",newShip:"Neue Sendung",trackNum:"Sendungsnummer",clientName:"Kundenname",cityPh:"Stadt / Land",etaPh:"z. B. 5. Dez. 2026",create:"Sendung anlegen",errFields:"Geben Sie Sendungsnummer, Start und Ziel an.",errExists:"Diese Sendungsnummer existiert bereits. Verwenden Sie eine andere.",errSave:"Speichern fehlgeschlagen. Bitte erneut versuchen.",statusLbl:"Status",progress:"Fortschritt",curLoc:"Aktueller Standort",locPh:"z. B. Hub Dubai",note:"Hinweis für den Kunden (optional)",post:"Update posten",close:"Schließen",del:"Sendung löschen",delConfirm:"Zum Löschen erneut tippen",history:"Update-Verlauf",posted:"Update veröffentlicht. Ihr Kunde kann es jetzt sehen.",sts:["Bestellung eingegangen","Abgeholt","Unterwegs","In Zustellung","Zugestellt"]},
+pt:{admin:"Admin",viewClient:"Ver como cliente",h_client:"Onde está a minha encomenda?",sub_client:"Digite o código de rastreio que recebeu.",tn_ph:"ex.: TRK-1001",track:"Rastrear",checking:"Verificando…",notFound:"Nenhuma encomenda encontrada com esse número. Confira e tente novamente.",trackNo:"N.º de rastreio",preparedFor:"Preparado para",expected:"Entrega prevista",lastUpdated:"Última atualização",updates:"Atualizações",noUpdates:"Ainda não há atualizações.",from:"Origem",to:"Destino",remove:"Remover",routeAria:"A encomenda está a {p}% do caminho até o destino",h_login:"Entrada do administrador",sub_login:"Digite sua senha para gerenciar as encomendas.",passcode:"Senha",signin:"Entrar",wrong:"Senha incorreta. Tente novamente.",h_manage:"Gerenciar encomendas",sub_manage:"Crie uma encomenda, passe o código de rastreio ao cliente e publique atualizações conforme ela avança.",yourShips:"Suas encomendas",noShips:"Nenhuma encomenda ainda. Adicione a primeira abaixo.",noClient:"Sem nome de cliente",newShip:"Nova encomenda",trackNum:"Código de rastreio",clientName:"Nome do cliente",cityPh:"Cidade / país",etaPh:"ex.: 5 dez 2026",create:"Criar encomenda",errFields:"Informe um código de rastreio, a origem e o destino.",errExists:"Esse código de rastreio já existe. Use outro.",errSave:"Não foi possível salvar. Tente novamente.",statusLbl:"Status",progress:"Progresso",curLoc:"Local atual",locPh:"ex.: hub de Dubai",note:"Nota para o cliente (opcional)",post:"Publicar atualização",close:"Fechar",del:"Excluir encomenda",delConfirm:"Toque de novo para excluir",history:"Histórico de atualizações",posted:"Atualização publicada. Seu cliente já pode ver.",sts:["Pedido recebido","Coletado","Em trânsito","Saiu para entrega","Entregue"]},
+it:{admin:"Admin",viewClient:"Vista cliente",h_client:"Dov'è la mia spedizione?",sub_client:"Inserisci il numero di tracciamento che ti è stato fornito.",tn_ph:"es. TRK-1001",track:"Traccia",checking:"Controllo…",notFound:"Nessuna spedizione trovata con questo numero. Controllalo e riprova.",trackNo:"N. di tracciamento",preparedFor:"Preparata per",expected:"Consegna prevista",lastUpdated:"Ultimo aggiornamento",updates:"Aggiornamenti",noUpdates:"Ancora nessun aggiornamento.",from:"Da",to:"A",remove:"Rimuovi",routeAria:"La spedizione ha percorso il {p}% del tragitto",h_login:"Accesso amministratore",sub_login:"Inserisci il codice per gestire le spedizioni.",passcode:"Codice",signin:"Accedi",wrong:"Codice errato. Riprova.",h_manage:"Gestisci spedizioni",sub_manage:"Crea una spedizione, dai il numero di tracciamento al cliente e pubblica gli aggiornamenti man mano.",yourShips:"Le tue spedizioni",noShips:"Nessuna spedizione. Aggiungi la prima qui sotto.",noClient:"Nessun nome cliente",newShip:"Nuova spedizione",trackNum:"Numero di tracciamento",clientName:"Nome del cliente",cityPh:"Città / paese",etaPh:"es. 5 dic 2026",create:"Crea spedizione",errFields:"Aggiungi numero di tracciamento, partenza e destinazione.",errExists:"Questo numero di tracciamento esiste già. Usane un altro.",errSave:"Salvataggio non riuscito. Riprova.",statusLbl:"Stato",progress:"Avanzamento",curLoc:"Posizione attuale",locPh:"es. hub di Dubai",note:"Nota per il cliente (facoltativa)",post:"Pubblica aggiornamento",close:"Chiudi",del:"Elimina spedizione",delConfirm:"Tocca di nuovo per eliminare",history:"Cronologia aggiornamenti",posted:"Aggiornamento pubblicato. Il cliente può vederlo.",sts:["Ordine ricevuto","Ritirato","In transito","In consegna","Consegnato"]},
+nl:{admin:"Beheer",viewClient:"Klantweergave",h_client:"Waar is mijn zending?",sub_client:"Voer het trackingnummer in dat je hebt gekregen.",tn_ph:"bijv. TRK-1001",track:"Volgen",checking:"Controleren…",notFound:"Geen zending gevonden met dat nummer. Controleer het en probeer opnieuw.",trackNo:"Trackingnr.",preparedFor:"Opgesteld voor",expected:"Verwachte levering",lastUpdated:"Laatst bijgewerkt",updates:"Updates",noUpdates:"Nog geen updates.",from:"Van",to:"Naar",remove:"Verwijderen",routeAria:"De zending is {p}% onderweg naar de bestemming",h_login:"Beheerder inloggen",sub_login:"Voer je toegangscode in om zendingen te beheren.",passcode:"Toegangscode",signin:"Inloggen",wrong:"Onjuiste code. Probeer opnieuw.",h_manage:"Zendingen beheren",sub_manage:"Maak een zending aan, geef je klant het trackingnummer en plaats updates tijdens het transport.",yourShips:"Jouw zendingen",noShips:"Nog geen zendingen. Voeg hieronder de eerste toe.",noClient:"Geen klantnaam",newShip:"Nieuwe zending",trackNum:"Trackingnummer",clientName:"Klantnaam",cityPh:"Stad / land",etaPh:"bijv. 5 dec 2026",create:"Zending aanmaken",errFields:"Voeg een trackingnummer, vertrekpunt en bestemming toe.",errExists:"Dit trackingnummer bestaat al. Gebruik een ander.",errSave:"Opslaan mislukt. Probeer opnieuw.",statusLbl:"Status",progress:"Voortgang",curLoc:"Huidige locatie",locPh:"bijv. hub Dubai",note:"Bericht voor klant (optioneel)",post:"Update plaatsen",close:"Sluiten",del:"Zending verwijderen",delConfirm:"Tik nogmaals om te verwijderen",history:"Updategeschiedenis",posted:"Update geplaatst. Je klant kan het nu zien.",sts:["Bestelling ontvangen","Opgehaald","Onderweg","Uit voor levering","Geleverd"]},
+ru:{admin:"Админ",viewClient:"Вид клиента",h_client:"Где моя посылка?",sub_client:"Введите номер отслеживания, который вам дали.",tn_ph:"напр. TRK-1001",track:"Найти",checking:"Проверяем…",notFound:"Посылка с таким номером не найдена. Проверьте номер и повторите.",trackNo:"Трек-номер",preparedFor:"Для",expected:"Ожидаемая доставка",lastUpdated:"Обновлено",updates:"События",noUpdates:"Пока нет обновлений.",from:"Откуда",to:"Куда",remove:"Удалить",routeAria:"Посылка прошла {p}% пути до места назначения",h_login:"Вход для администратора",sub_login:"Введите пароль для управления отправлениями.",passcode:"Пароль",signin:"Войти",wrong:"Неверный пароль. Попробуйте снова.",h_manage:"Управление отправлениями",sub_manage:"Создайте отправление, передайте клиенту трек-номер и публикуйте обновления по ходу доставки.",yourShips:"Ваши отправления",noShips:"Отправлений пока нет. Добавьте первое ниже.",noClient:"Имя клиента не указано",newShip:"Новое отправление",trackNum:"Трек-номер",clientName:"Имя клиента",cityPh:"Город / страна",etaPh:"напр. 5 дек 2026",create:"Создать отправление",errFields:"Укажите трек-номер, пункт отправления и назначения.",errExists:"Такой трек-номер уже существует. Используйте другой.",errSave:"Не удалось сохранить. Повторите попытку.",statusLbl:"Статус",progress:"Прогресс",curLoc:"Текущее местоположение",locPh:"напр. хаб в Дубае",note:"Заметка для клиента (необязательно)",post:"Опубликовать обновление",close:"Закрыть",del:"Удалить отправление",delConfirm:"Нажмите ещё раз для удаления",history:"История обновлений",posted:"Обновление опубликовано. Клиент уже может его видеть.",sts:["Заказ принят","Забран","В пути","Передан курьеру","Доставлен"]},
+zh:{admin:"管理员",viewClient:"客户视图",h_client:"我的包裹在哪里？",sub_client:"请输入您收到的运单号。",tn_ph:"例如 TRK-1001",track:"查询",checking:"查询中…",notFound:"未找到该单号对应的包裹，请核对后重试。",trackNo:"运单号",preparedFor:"收件客户",expected:"预计送达",lastUpdated:"最近更新",updates:"物流动态",noUpdates:"暂无动态。",from:"起点",to:"终点",remove:"删除",routeAria:"包裹已完成全程的 {p}%",h_login:"管理员登录",sub_login:"输入密码以管理货件。",passcode:"密码",signin:"登录",wrong:"密码错误，请重试。",h_manage:"管理货件",sub_manage:"创建货件，把运单号告诉客户，然后随着运输进展发布动态。",yourShips:"您的货件",noShips:"暂无货件，请在下方添加第一个。",noClient:"未填写客户名称",newShip:"新建货件",trackNum:"运单号",clientName:"客户名称",cityPh:"城市 / 国家",etaPh:"例如 2026年12月5日",create:"创建货件",errFields:"请填写运单号、起点和终点。",errExists:"该运单号已存在，请换一个。",errSave:"保存失败，请重试。",statusLbl:"状态",progress:"进度",curLoc:"当前位置",locPh:"例如 迪拜中转站",note:"给客户的备注（可选）",post:"发布动态",close:"关闭",del:"删除货件",delConfirm:"再点一次以删除",history:"动态记录",posted:"动态已发布，客户现在可以看到。",sts:["已接单","已揽收","运输中","派送中","已签收"]},
+ja:{admin:"管理者",viewClient:"顧客表示",h_client:"荷物はどこ？",sub_client:"お知らせした追跡番号を入力してください。",tn_ph:"例：TRK-1001",track:"追跡",checking:"確認中…",notFound:"その番号の荷物は見つかりません。番号を確認してもう一度お試しください。",trackNo:"追跡番号",preparedFor:"お客様",expected:"お届け予定",lastUpdated:"最終更新",updates:"配送状況",noUpdates:"まだ更新はありません。",from:"発送元",to:"お届け先",remove:"削除",routeAria:"荷物は目的地までの {p}% を進んでいます",h_login:"管理者ログイン",sub_login:"荷物を管理するにはパスコードを入力してください。",passcode:"パスコード",signin:"ログイン",wrong:"パスコードが違います。もう一度お試しください。",h_manage:"荷物の管理",sub_manage:"荷物を作成し、お客様に追跡番号を伝え、進捗に合わせて更新を投稿します。",yourShips:"荷物一覧",noShips:"荷物はまだありません。下から最初の1件を追加してください。",noClient:"顧客名なし",newShip:"新しい荷物",trackNum:"追跡番号",clientName:"顧客名",cityPh:"都市／国",etaPh:"例：2026年12月5日",create:"荷物を作成",errFields:"追跡番号、発送元、お届け先を入力してください。",errExists:"その追跡番号は既に使われています。別の番号にしてください。",errSave:"保存できませんでした。もう一度お試しください。",statusLbl:"ステータス",progress:"進捗",curLoc:"現在地",locPh:"例：ドバイ拠点",note:"お客様へのメモ（任意）",post:"更新を投稿",close:"閉じる",del:"荷物を削除",delConfirm:"もう一度タップして削除",history:"更新履歴",posted:"更新を投稿しました。お客様に表示されます。",sts:["注文受付","集荷済み","輸送中","配達中","配達完了"]},
+ko:{admin:"관리자",viewClient:"고객 화면",h_client:"내 배송은 어디에 있나요?",sub_client:"안내받은 운송장 번호를 입력하세요.",tn_ph:"예: TRK-1001",track:"조회",checking:"확인 중…",notFound:"해당 번호의 배송을 찾을 수 없습니다. 번호를 확인 후 다시 시도하세요.",trackNo:"운송장 번호",preparedFor:"수령인",expected:"도착 예정",lastUpdated:"마지막 업데이트",updates:"배송 현황",noUpdates:"아직 업데이트가 없습니다.",from:"출발지",to:"도착지",remove:"삭제",routeAria:"배송이 목적지까지 {p}% 진행되었습니다",h_login:"관리자 로그인",sub_login:"배송을 관리하려면 비밀번호를 입력하세요.",passcode:"비밀번호",signin:"로그인",wrong:"비밀번호가 틀렸습니다. 다시 시도하세요.",h_manage:"배송 관리",sub_manage:"배송을 만들고 고객에게 운송장 번호를 알려준 뒤, 진행 상황에 따라 업데이트를 올리세요.",yourShips:"내 배송",noShips:"아직 배송이 없습니다. 아래에서 첫 배송을 추가하세요.",noClient:"고객명 없음",newShip:"새 배송",trackNum:"운송장 번호",clientName:"고객명",cityPh:"도시 / 국가",etaPh:"예: 2026년 12월 5일",create:"배송 만들기",errFields:"운송장 번호, 출발지, 도착지를 입력하세요.",errExists:"이미 있는 운송장 번호입니다. 다른 번호를 사용하세요.",errSave:"저장하지 못했습니다. 다시 시도하세요.",statusLbl:"상태",progress:"진행률",curLoc:"현재 위치",locPh:"예: 두바이 허브",note:"고객에게 남기는 메모 (선택)",post:"업데이트 게시",close:"닫기",del:"배송 삭제",delConfirm:"삭제하려면 한 번 더 누르세요",history:"업데이트 기록",posted:"업데이트가 게시되었습니다. 고객이 볼 수 있습니다.",sts:["주문 접수","집하 완료","이동 중","배송 출발","배송 완료"]},
+ar:{admin:"المشرف",viewClient:"عرض العميل",h_client:"أين شحنتي؟",sub_client:"أدخل رقم التتبع الذي حصلت عليه.",tn_ph:"مثال: TRK-1001",track:"تتبع",checking:"جارٍ التحقق…",notFound:"لم يتم العثور على شحنة بهذا الرقم. تحقق منه وحاول مرة أخرى.",trackNo:"رقم التتبع",preparedFor:"أُعدّت لـ",expected:"موعد التسليم المتوقع",lastUpdated:"آخر تحديث",updates:"التحديثات",noUpdates:"لا توجد تحديثات بعد.",from:"من",to:"إلى",remove:"إزالة",routeAria:"أكملت الشحنة {p}% من طريقها إلى وجهتها",h_login:"تسجيل دخول المشرف",sub_login:"أدخل رمز المرور لإدارة الشحنات.",passcode:"رمز المرور",signin:"دخول",wrong:"رمز المرور غير صحيح. حاول مرة أخرى.",h_manage:"إدارة الشحنات",sub_manage:"أنشئ شحنة، وأعطِ عميلك رقم التتبع، ثم انشر التحديثات أثناء تحركها.",yourShips:"شحناتك",noShips:"لا توجد شحنات بعد. أضف الأولى أدناه.",noClient:"بدون اسم عميل",newShip:"شحنة جديدة",trackNum:"رقم التتبع",clientName:"اسم العميل",cityPh:"المدينة / الدولة",etaPh:"مثال: 5 ديسمبر 2026",create:"إنشاء الشحنة",errFields:"أضف رقم التتبع ونقطة الانطلاق والوجهة.",errExists:"رقم التتبع موجود بالفعل. استخدم رقمًا آخر.",errSave:"تعذّر الحفظ. حاول مرة أخرى.",statusLbl:"الحالة",progress:"التقدم",curLoc:"الموقع الحالي",locPh:"مثال: مركز دبي",note:"ملاحظة للعميل (اختياري)",post:"نشر التحديث",close:"إغلاق",del:"حذف الشحنة",delConfirm:"اضغط مرة أخرى للحذف",history:"سجل التحديثات",posted:"تم نشر التحديث. يمكن لعميلك رؤيته الآن.",sts:["تم استلام الطلب","تم الاستلام من المرسل","في الطريق","خرجت للتسليم","تم التسليم"]},
+hi:{admin:"एडमिन",viewClient:"ग्राहक के रूप में देखें",h_client:"मेरा शिपमेंट कहाँ है?",sub_client:"आपको दिया गया ट्रैकिंग नंबर दर्ज करें।",tn_ph:"जैसे TRK-1001",track:"ट्रैक करें",checking:"जाँच हो रही है…",notFound:"इस नंबर का कोई शिपमेंट नहीं मिला। नंबर जाँचकर फिर कोशिश करें।",trackNo:"ट्रैकिंग नं.",preparedFor:"किसके लिए",expected:"अपेक्षित डिलीवरी",lastUpdated:"आखिरी अपडेट",updates:"अपडेट",noUpdates:"अभी कोई अपडेट नहीं।",from:"कहाँ से",to:"कहाँ तक",remove:"हटाएँ",routeAria:"शिपमेंट अपने गंतव्य के {p}% रास्ते तक पहुँच चुका है",h_login:"एडमिन साइन इन",sub_login:"शिपमेंट प्रबंधित करने के लिए अपना पासकोड दर्ज करें।",passcode:"पासकोड",signin:"साइन इन",wrong:"गलत पासकोड। फिर कोशिश करें।",h_manage:"शिपमेंट प्रबंधित करें",sub_manage:"शिपमेंट बनाएँ, ग्राहक को ट्रैकिंग नंबर दें, और आगे बढ़ने पर अपडेट पोस्ट करें।",yourShips:"आपके शिपमेंट",noShips:"अभी कोई शिपमेंट नहीं। नीचे पहला जोड़ें।",noClient:"ग्राहक का नाम नहीं",newShip:"नया शिपमेंट",trackNum:"ट्रैकिंग नंबर",clientName:"ग्राहक का नाम",cityPh:"शहर / देश",etaPh:"जैसे 5 दिसंबर 2026",create:"शिपमेंट बनाएँ",errFields:"ट्रैकिंग नंबर, शुरुआती स्थान और गंतव्य जोड़ें।",errExists:"यह ट्रैकिंग नंबर पहले से मौजूद है। कोई और उपयोग करें।",errSave:"सहेजा नहीं जा सका। फिर कोशिश करें।",statusLbl:"स्थिति",progress:"प्रगति",curLoc:"वर्तमान स्थान",locPh:"जैसे दुबई हब",note:"ग्राहक के लिए नोट (वैकल्पिक)",post:"अपडेट पोस्ट करें",close:"बंद करें",del:"शिपमेंट हटाएँ",delConfirm:"हटाने के लिए फिर टैप करें",history:"अपडेट इतिहास",posted:"अपडेट पोस्ट हो गया। आपका ग्राहक अब इसे देख सकता है।",sts:["ऑर्डर प्राप्त","पिकअप हुआ","रास्ते में","डिलीवरी के लिए निकला","डिलीवर हुआ"]},
+tr:{admin:"Yönetici",viewClient:"Müşteri görünümü",h_client:"Gönderim nerede?",sub_client:"Size verilen takip numarasını girin.",tn_ph:"örn. TRK-1001",track:"Takip et",checking:"Kontrol ediliyor…",notFound:"Bu numaraya ait gönderi bulunamadı. Numarayı kontrol edip tekrar deneyin.",trackNo:"Takip no.",preparedFor:"Alıcı",expected:"Tahmini teslimat",lastUpdated:"Son güncelleme",updates:"Güncellemeler",noUpdates:"Henüz güncelleme yok.",from:"Nereden",to:"Nereye",remove:"Kaldır",routeAria:"Gönderi varış noktasına giden yolun %{p} kadarını tamamladı",h_login:"Yönetici girişi",sub_login:"Gönderileri yönetmek için parolanızı girin.",passcode:"Parola",signin:"Giriş yap",wrong:"Yanlış parola. Tekrar deneyin.",h_manage:"Gönderileri yönet",sub_manage:"Bir gönderi oluşturun, müşterinize takip numarasını verin ve ilerledikçe güncelleme yayınlayın.",yourShips:"Gönderileriniz",noShips:"Henüz gönderi yok. İlkini aşağıdan ekleyin.",noClient:"Müşteri adı yok",newShip:"Yeni gönderi",trackNum:"Takip numarası",clientName:"Müşteri adı",cityPh:"Şehir / ülke",etaPh:"örn. 5 Ara 2026",create:"Gönderi oluştur",errFields:"Takip numarası, çıkış ve varış noktası ekleyin.",errExists:"Bu takip numarası zaten var. Başka bir numara kullanın.",errSave:"Kaydedilemedi. Tekrar deneyin.",statusLbl:"Durum",progress:"İlerleme",curLoc:"Şu anki konum",locPh:"örn. Dubai aktarma merkezi",note:"Müşteri için not (isteğe bağlı)",post:"Güncellemeyi yayınla",close:"Kapat",del:"Gönderiyi sil",delConfirm:"Silmek için tekrar dokunun",history:"Güncelleme geçmişi",posted:"Güncelleme yayınlandı. Müşteriniz artık görebilir.",sts:["Sipariş alındı","Teslim alındı","Yolda","Dağıtıma çıktı","Teslim edildi"]},
+id:{admin:"Admin",viewClient:"Tampilan klien",h_client:"Di mana kiriman saya?",sub_client:"Masukkan nomor pelacakan yang Anda terima.",tn_ph:"mis. TRK-1001",track:"Lacak",checking:"Memeriksa…",notFound:"Tidak ada kiriman dengan nomor itu. Periksa lalu coba lagi.",trackNo:"No. pelacakan",preparedFor:"Untuk",expected:"Perkiraan tiba",lastUpdated:"Terakhir diperbarui",updates:"Pembaruan",noUpdates:"Belum ada pembaruan.",from:"Dari",to:"Tujuan",remove:"Hapus",routeAria:"Kiriman sudah menempuh {p}% perjalanan ke tujuan",h_login:"Masuk admin",sub_login:"Masukkan kode akses untuk mengelola kiriman.",passcode:"Kode akses",signin:"Masuk",wrong:"Kode akses salah. Coba lagi.",h_manage:"Kelola kiriman",sub_manage:"Buat kiriman, berikan nomor pelacakan ke klien, lalu kirim pembaruan seiring perjalanannya.",yourShips:"Kiriman Anda",noShips:"Belum ada kiriman. Tambahkan yang pertama di bawah.",noClient:"Tanpa nama klien",newShip:"Kiriman baru",trackNum:"Nomor pelacakan",clientName:"Nama klien",cityPh:"Kota / negara",etaPh:"mis. 5 Des 2026",create:"Buat kiriman",errFields:"Isi nomor pelacakan, asal, dan tujuan.",errExists:"Nomor pelacakan itu sudah ada. Gunakan yang lain.",errSave:"Gagal menyimpan. Coba lagi.",statusLbl:"Status",progress:"Progres",curLoc:"Lokasi saat ini",locPh:"mis. hub Dubai",note:"Catatan untuk klien (opsional)",post:"Kirim pembaruan",close:"Tutup",del:"Hapus kiriman",delConfirm:"Ketuk lagi untuk menghapus",history:"Riwayat pembaruan",posted:"Pembaruan terkirim. Klien Anda sudah bisa melihatnya.",sts:["Pesanan diterima","Sudah dijemput","Dalam perjalanan","Sedang diantar","Terkirim"]},
+el:{admin:"Διαχειριστής",viewClient:"Προβολή πελάτη",h_client:"Πού είναι η αποστολή μου;",sub_client:"Εισάγετε τον αριθμό παρακολούθησης που σας δόθηκε.",tn_ph:"π.χ. TRK-1001",track:"Εντοπισμός",checking:"Έλεγχος…",notFound:"Δεν βρέθηκε αποστολή με αυτόν τον αριθμό. Ελέγξτε τον και δοκιμάστε ξανά.",trackNo:"Αρ. παρακολούθησης",preparedFor:"Για",expected:"Εκτιμώμενη παράδοση",lastUpdated:"Τελευταία ενημέρωση",updates:"Ενημερώσεις",noUpdates:"Δεν υπάρχουν ενημερώσεις ακόμη.",from:"Από",to:"Προς",remove:"Αφαίρεση",routeAria:"Η αποστολή έχει διανύσει το {p}% της διαδρομής προς τον προορισμό",h_login:"Σύνδεση διαχειριστή",sub_login:"Εισάγετε τον κωδικό σας για να διαχειριστείτε τις αποστολές.",passcode:"Κωδικός",signin:"Σύνδεση",wrong:"Λάθος κωδικός. Δοκιμάστε ξανά.",h_manage:"Διαχείριση αποστολών",sub_manage:"Δημιουργήστε μια αποστολή, δώστε τον αριθμό παρακολούθησης στον πελάτη σας και δημοσιεύστε ενημερώσεις καθώς προχωρά.",yourShips:"Οι αποστολές σας",noShips:"Καμία αποστολή ακόμη. Προσθέστε την πρώτη παρακάτω.",noClient:"Χωρίς όνομα πελάτη",newShip:"Νέα αποστολή",trackNum:"Αριθμός παρακολούθησης",clientName:"Όνομα πελάτη",cityPh:"Πόλη / χώρα",etaPh:"π.χ. 5 Δεκ 2026",create:"Δημιουργία αποστολής",errFields:"Προσθέστε αριθμό παρακολούθησης, αφετηρία και προορισμό.",errExists:"Αυτός ο αριθμός παρακολούθησης υπάρχει ήδη. Χρησιμοποιήστε άλλον.",errSave:"Η αποθήκευση απέτυχε. Δοκιμάστε ξανά.",statusLbl:"Κατάσταση",progress:"Πρόοδος",curLoc:"Τρέχουσα τοποθεσία",locPh:"π.χ. κέντρο διανομής Ντουμπάι",note:"Σημείωση για τον πελάτη (προαιρετικό)",post:"Δημοσίευση ενημέρωσης",close:"Κλείσιμο",del:"Διαγραφή αποστολής",delConfirm:"Πατήστε ξανά για διαγραφή",history:"Ιστορικό ενημερώσεων",posted:"Η ενημέρωση δημοσιεύτηκε. Ο πελάτης σας μπορεί να τη δει.",sts:["Η παραγγελία παραλήφθηκε","Παραλήφθηκε από τον αποστολέα","Καθ' οδόν","Σε διανομή","Παραδόθηκε"]}
+};
+
+function pickLang(){
+  const prefs = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language || "en"];
+  for(const p of prefs){
+    const base = String(p).toLowerCase().split("-")[0];
+    if(L[base]) return base;
+  }
+  return "en";
+}
+const LANG = pickLang();
+L.en.errLoad = "Could not load right now. Check your connection and try again.";
+const T = Object.assign({}, L.en, L[LANG]);
+const t = (k, v) => { let s = T[k] ?? k; if(v) for(const x in v) s = s.replace("{"+x+"}", v[x]); return s; };
+const tStatus = name => { const i = EN_STATUSES.indexOf(name); return i >= 0 ? T.sts[i] : name; };
+document.documentElement.lang = LANG;
+document.documentElement.dir = (LANG === "ar") ? "rtl" : "ltr";
+const DATE_LOCALE = (navigator.languages && navigator.languages[0]) || LANG;
+
+/* ====== APP ====== */
+const STATUSES = [
+  {name:EN_STATUSES[0], pct:5},
+  {name:EN_STATUSES[1], pct:25},
+  {name:EN_STATUSES[2], pct:55},
+  {name:EN_STATUSES[3], pct:85},
+  {name:EN_STATUSES[4], pct:100}
+];
+const KEY = "shipments";
+let db = {shipments:[]};
+let mode = "client";
+let authed = false;
+let selectedId = null;
+let viewing = null;
+let pendingDelete = null;
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = iso => { try{ return new Date(iso).toLocaleString(DATE_LOCALE, {dateStyle:"medium", timeStyle:"short"}); }catch(e){ return new Date(iso).toLocaleString(); } };
+
+/* Storage: Firebase Firestore (one document per shipment, id = tracking number in lowercase) */
+const configured = !firebaseConfig.apiKey.startsWith("PASTE");
+let fdb = null, auth = null;
+if(configured){
+  const app = initializeApp(firebaseConfig);
+  fdb = getFirestore(app);
+  auth = getAuth(app);
+}
+const keyOf = id => String(id).trim().toLowerCase();
+async function fetchOne(id){
+  const snap = await getDoc(doc(fdb, "shipments", keyOf(id)));
+  db.shipments = snap.exists() ? [snap.data()] : [];
+}
+async function fetchAll(){
+  const snap = await getDocs(collection(fdb, "shipments"));
+  db.shipments = snap.docs.map(d => d.data()).sort((a,b) => (b.created||0) - (a.created||0));
+}
+async function saveShip(s){
+  try{ await setDoc(doc(fdb, "shipments", keyOf(s.id)), s); return true; }
+  catch(e){ console.error(e); return false; }
+}
+async function removeShip(s){
+  try{ await deleteDoc(doc(fdb, "shipments", keyOf(s.id))); return true; }
+  catch(e){ console.error(e); return false; }
+}
+const notice = () => configured ? "" :
+  `<p class="msg err" style="margin:0 0 16px">Setup needed: paste your Firebase details into the settings at the top of this file.</p>`;
+const find = id => db.shipments.find(s => s.id.toLowerCase() === String(id).trim().toLowerCase());
+
+const truckSvg = '<svg viewBox="0 0 24 24"><path d="M3 6h11v9H3zM14 9h4l3 3v3h-7zM6.5 19a2 2 0 100-4 2 2 0 000 4zm11 0a2 2 0 100-4 2 2 0 000 4z"/></svg>';
+
+function routeHTML(s){
+  const p = Math.max(0, Math.min(100, s.progress));
+  return `
+  <div class="route" role="img" aria-label="${esc(t("routeAria",{p}))}">
+    <div class="track"></div>
+    <div class="done" style="width:${p}%"></div>
+    <div class="stop a"></div>
+    <div class="stop b ${p>=100?"reached":""}"></div>
+    <div class="truck" style="left:${p}%">${truckSvg}</div>
+  </div>
+  <div class="ends">
+    <div><small>${esc(t("from"))}</small>${esc(s.origin)}</div>
+    <div><small>${esc(t("to"))}</small>${esc(s.dest)}</div>
+  </div>`;
+}
+function timelineHTML(s, admin){
+  if(!s.updates.length) return `<p class="sub">${esc(t("noUpdates"))}</p>`;
+  return '<ul class="tl">' + s.updates.map((u,i)=>`
+    <li>
+      ${admin?`<button class="link x" data-del="${i}">${esc(t("remove"))}</button>`:""}
+      <div class="t-status">${esc(tStatus(u.status))}</div>
+      <div class="t-meta">${esc(fmt(u.t))}${u.loc?" · "+esc(u.loc):""}</div>
+      ${u.note?`<div class="t-note">${esc(u.note)}</div>`:""}
+    </li>`).join("") + '</ul>';
+}
+function summaryHTML(s){
+  return `
+  <div class="panel">
+    <div class="status-line">
+      <div class="status-big">${esc(tStatus(s.status))}</div>
+      <div class="badge">${esc(t("trackNo"))} ${esc(s.id)}</div>
+    </div>
+    ${routeHTML(s)}
+    <div class="meta">
+      ${s.client?`<div><small>${esc(t("preparedFor"))}</small>${esc(s.client)}</div>`:""}
+      ${s.eta?`<div><small>${esc(t("expected"))}</small>${esc(s.eta)}</div>`:""}
+      <div><small>${esc(t("lastUpdated"))}</small>${s.updates[0]?esc(fmt(s.updates[0].t)):"—"}</div>
+    </div>
+  </div>`;
+}
+
+/* ===== Client view ===== */
+function renderClient(){
+  const s = viewing ? find(viewing) : null;
+  $("#app").innerHTML = `
+    <h1>${esc(t("h_client"))}</h1>
+    <p class="sub">${esc(t("sub_client"))}</p>
+    ${notice()}
+    <form class="track-form" id="trackForm" onsubmit="return false">
+      <input id="tn" placeholder="${esc(t("tn_ph"))}" autocomplete="off" value="${esc(viewing||"")}" aria-label="${esc(t("trackNum"))}">
+      <button class="btn" id="trackBtn" type="button">${esc(t("track"))}</button>
+    </form>
+    <p class="msg err" id="clientMsg"></p>
+    <div id="result" style="margin-top:20px">
+      ${s ? summaryHTML(s) + `<div class="panel"><h2>${esc(t("updates"))}</h2>${timelineHTML(s,false)}</div>` : ""}
+    </div>`;
+  const go = async () => {
+    const v = $("#tn").value.trim();
+    if(!v) return;
+    $("#trackBtn").textContent = t("checking");
+    try{
+      if(!configured) throw new Error("not configured");
+      await fetchOne(v);
+    }catch(e){
+      console.error(e);
+      viewing = null; renderClient(); $("#tn").value = v;
+      $("#clientMsg").textContent = t("errLoad"); return;
+    }
+    if(find(v)){ viewing = find(v).id; renderClient(); }
+    else { viewing = null; renderClient(); $("#tn").value = v; $("#clientMsg").textContent = t("notFound"); }
+  };
+  $("#trackBtn").onclick = go;
+  $("#tn").onkeydown = e => { if(e.key==="Enter") go(); };
+}
+
+/* ===== Admin ===== */
+function renderLogin(){
+  $("#app").innerHTML = `
+    <h1>${esc(t("h_login"))}</h1>
+    <p class="sub">${esc(t("sub_login"))}</p>
+    <div class="panel">
+      <label for="pc">${esc(t("passcode"))}</label>
+      <input id="pc" type="password" autocomplete="off">
+      <p class="msg err" id="loginMsg"></p>
+      <button class="btn" id="loginBtn" style="margin-top:12px">${esc(t("signin"))}</button>
+    </div>`;
+  const go = async () => {
+    try{
+      if(!configured) throw new Error("not configured");
+      await signInWithEmailAndPassword(auth, ADMIN_EMAIL, $("#pc").value);
+    }catch(e){
+      console.error(e);
+      $("#loginMsg").textContent = t("wrong"); return;
+    }
+    authed = true;
+    try{ await fetchAll(); }catch(e){ console.error(e); }
+    renderAdmin();
+  };
+  $("#loginBtn").onclick = go;
+  $("#pc").onkeydown = e => { if(e.key==="Enter") go(); };
+}
+
+function renderAdmin(){
+  const s = selectedId ? find(selectedId) : null;
+  $("#app").innerHTML = `
+    <h1>${esc(t("h_manage"))}</h1>
+    <p class="sub">${esc(t("sub_manage"))}</p>
+    ${notice()}
+
+    <div class="panel">
+      <h2>${esc(t("yourShips"))}</h2>
+      ${db.shipments.length ? db.shipments.map(x=>`
+        <div class="ship-item" data-open="${esc(x.id)}">
+          <div><strong>${esc(x.id)}</strong><span>${esc(x.client||t("noClient"))} · ${esc(x.origin)} → ${esc(x.dest)}</span></div>
+          <span>${esc(tStatus(x.status))}</span>
+        </div>`).join("") : `<p class="sub" style="margin:0">${esc(t("noShips"))}</p>`}
+    </div>
+
+    ${s ? editorHTML(s) : ""}
+
+    <div class="panel">
+      <h2>${esc(t("newShip"))}</h2>
+      <div class="row">
+        <div><label for="n_id">${esc(t("trackNum"))}</label><input id="n_id" placeholder="TRK-1001"></div>
+        <div><label for="n_client">${esc(t("clientName"))}</label><input id="n_client"></div>
+      </div>
+      <div class="row">
+        <div><label for="n_o">${esc(t("from"))}</label><input id="n_o" placeholder="${esc(t("cityPh"))}"></div>
+        <div><label for="n_d">${esc(t("to"))}</label><input id="n_d" placeholder="${esc(t("cityPh"))}"></div>
+      </div>
+      <label for="n_eta">${esc(t("expected"))}</label>
+      <input id="n_eta" placeholder="${esc(t("etaPh"))}">
+      <p class="msg" id="newMsg"></p>
+      <button class="btn" id="createBtn" style="margin-top:12px">${esc(t("create"))}</button>
+    </div>`;
+
+  document.querySelectorAll("[data-open]").forEach(el => el.onclick = () => { selectedId = el.dataset.open; pendingDelete = null; renderAdmin(); window.scrollTo(0,0); });
+  $("#createBtn").onclick = createShipment;
+  if(s) wireEditor(s);
+}
+
+function editorHTML(s){
+  return `
+  <div class="panel">
+    <h2>${esc(s.id)}</h2>
+    ${routeHTML(s)}
+    <label for="e_status">${esc(t("statusLbl"))}</label>
+    <select id="e_status">${STATUSES.map(x=>`<option value="${esc(x.name)}" ${x.name===s.status?"selected":""}>${esc(tStatus(x.name))}</option>`).join("")}</select>
+    <label for="e_prog">${esc(t("progress"))}: <span id="e_pv">${s.progress}</span>%</label>
+    <input id="e_prog" type="range" min="0" max="100" value="${s.progress}">
+    <div class="row">
+      <div><label for="e_loc">${esc(t("curLoc"))}</label><input id="e_loc" placeholder="${esc(t("locPh"))}"></div>
+      <div><label for="e_eta">${esc(t("expected"))}</label><input id="e_eta" value="${esc(s.eta)}"></div>
+    </div>
+    <label for="e_note">${esc(t("note"))}</label>
+    <textarea id="e_note"></textarea>
+    <p class="msg" id="editMsg"></p>
+    <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn" id="postBtn">${esc(t("post"))}</button>
+      <button class="btn ghost" id="closeBtn">${esc(t("close"))}</button>
+      <button class="btn danger" id="delShip" style="margin-inline-start:auto">${esc(pendingDelete===s.id?t("delConfirm"):t("del"))}</button>
+    </div>
+  </div>
+  <div class="panel"><h2>${esc(t("history"))}</h2>${timelineHTML(s,true)}</div>`;
+}
+
+function wireEditor(s){
+  $("#e_status").onchange = e => {
+    const st = STATUSES.find(x=>x.name===e.target.value);
+    $("#e_prog").value = st.pct; $("#e_pv").textContent = st.pct;
+  };
+  $("#e_prog").oninput = e => $("#e_pv").textContent = e.target.value;
+  $("#closeBtn").onclick = () => { selectedId = null; renderAdmin(); };
+  $("#postBtn").onclick = async () => {
+    s.status = $("#e_status").value;
+    s.progress = Number($("#e_prog").value);
+    s.eta = $("#e_eta").value.trim();
+    s.updates.unshift({t:new Date().toISOString(), status:s.status, loc:$("#e_loc").value.trim(), note:$("#e_note").value.trim()});
+    const ok = await saveShip(s);
+    renderAdmin();
+    $("#editMsg").className = "msg " + (ok?"ok":"err");
+    $("#editMsg").textContent = ok ? t("posted") : t("errSave");
+  };
+  $("#delShip").onclick = async () => {
+    if(pendingDelete !== s.id){ pendingDelete = s.id; renderAdmin(); return; }
+    const gone = await removeShip(s);
+    if(gone) db.shipments = db.shipments.filter(x=>x!==s);
+    selectedId = null; pendingDelete = null;
+    renderAdmin();
+  };
+  document.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
+    s.updates.splice(Number(b.dataset.del),1);
+    if(s.updates[0]) s.status = s.updates[0].status;
+    await saveShip(s); renderAdmin();
+  });
+}
+
+async function createShipment(){
+  const id = $("#n_id").value.trim(), o = $("#n_o").value.trim(), d = $("#n_d").value.trim();
+  const m = $("#newMsg"); m.className = "msg err";
+  if(!id || !o || !d){ m.textContent = t("errFields"); return; }
+  if(find(id)){ m.textContent = t("errExists"); return; }
+  const ship = {
+    created:Date.now(),
+    id, client:$("#n_client").value.trim(), origin:o, dest:d, eta:$("#n_eta").value.trim(),
+    status:STATUSES[0].name, progress:STATUSES[0].pct,
+    updates:[{t:new Date().toISOString(), status:STATUSES[0].name, loc:o, note:""}]
+  };
+  const ok = await saveShip(ship);
+  if(!ok){ m.textContent = t("errSave"); return; }
+  db.shipments.unshift(ship);
+  selectedId = id; renderAdmin();
+}
+
+/* ===== Mode switch ===== */
+$("#modeBtn").onclick = async () => {
+  if(mode==="client"){
+    mode="admin"; $("#modeBtn").textContent = t("viewClient");
+    if(configured){ try{ await auth.authStateReady(); authed = !!auth.currentUser; }catch(e){ authed = false; } }
+    if(authed){ try{ await fetchAll(); }catch(e){ console.error(e); } renderAdmin(); } else renderLogin();
+  } else {
+    mode="client"; $("#modeBtn").textContent = t("admin");
+    if(viewing && configured){ try{ await fetchOne(viewing); }catch(e){} }
+    renderClient();
+  }
+};
+
+document.title = BUSINESS_NAME;
+$("#brand").textContent = BUSINESS_NAME;
+$("#modeBtn").textContent = t("admin");
+renderClient();
+</script>
+</body>
+</html>
